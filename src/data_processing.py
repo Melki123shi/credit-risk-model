@@ -1,6 +1,5 @@
 import logging
 import pandas as pd
-from datetime import datetime
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.cluster import KMeans
 from sklearn.impute import SimpleImputer
@@ -46,10 +45,14 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     now_utc = pd.Timestamp.now(tz="UTC")
-    customer_agg["Recency"] = (now_utc - customer_agg["LastTransaction"]).dt.days
+    customer_agg["Recency"] = (
+        now_utc - customer_agg["LastTransaction"]
+        ).dt.days
+    customer_agg_lst = customer_agg["LastTransaction"]
+    customer_agg_first = customer_agg["FirstTransaction"]
     customer_agg["CustomerTenureDays"] = (
-        customer_agg["LastTransaction"] - customer_agg["FirstTransaction"]
-    ).dt.days
+        customer_agg_lst - customer_agg_first
+        ).dt.days
 
     df = df.merge(customer_agg, on="CustomerId", how="left")
 
@@ -110,7 +113,14 @@ def split_data(
     val_size: float = 0.1,
     random_state: int = 42,
     stratify: bool = True,
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series, pd.Series]:
+) -> Tuple[
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.DataFrame,
+    pd.Series,
+    pd.Series,
+    pd.Series,
+]:
     """
     Split data into train, validation, and test sets.
 
@@ -154,11 +164,11 @@ def split_data(
 
     print("Split completed:")
     n = len(df)
-    print(f"   Train: {X_train.shape[0]:,} records ({X_train.shape[0] / n:.1%})")
-    print(f"   Val:   {X_val.shape[0]:,} records ({X_val.shape[0] / n:.1%})")
-    print(f"   Test:  {X_test.shape[0]:,} records ({X_test.shape[0] / n:.1%})")
+    print(f"  Train: {X_train.shape[0]:,} records({X_train.shape[0] / n:.1%})")
+    print(f"  Val:  {X_val.shape[0]:,} records({X_val.shape[0] / n:.1%})")
+    print(f"  Test:  {X_test.shape[0]:,} records({X_test.shape[0] / n:.1%})")
     train_dist = y_train.value_counts(normalize=True).round(3).to_dict()
-    print(f"   Target distribution (Train): {train_dist}")
+    print(f"  Target distribution (Train): {train_dist}")
 
     return X_train, X_val, X_test, y_train, y_val, y_test
 
@@ -198,7 +208,11 @@ class DataFrameOneHotEncoder(BaseEstimator, TransformerMixin):
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
         encoded = self.encoder_.transform(X[self.categorical_cols_])
-        encoded_df = pd.DataFrame(encoded, columns=self.feature_names_, index=X.index)
+        encoded_df = pd.DataFrame(
+            encoded,
+            columns=self.feature_names_,
+            index=X.index
+            )
         X = X.drop(columns=self.categorical_cols_)
         X = pd.concat([X, encoded_df], axis=1)
         return X
@@ -229,7 +243,8 @@ class FeatureScaler(BaseEstimator, TransformerMixin):
             self.numerical_cols_ = [
                 col
                 for col in X.columns
-                if (pd.api.types.is_numeric_dtype(X[col]) and col != self.target_col)
+                if (pd.api.types.is_numeric_dtype(X[col])
+                    and col != self.target_col)
             ]
         else:
             self.numerical_cols_ = [
@@ -319,10 +334,15 @@ class OutlierCapper(BaseEstimator, TransformerMixin):
 
 
 def cap_outliers(
-    df: pd.DataFrame, numerical_cols: List[str] = None, iqr_multiplier: float = 1.5
+    df: pd.DataFrame,
+    numerical_cols: List[str] = None,
+    iqr_multiplier: float = 1.5
 ) -> pd.DataFrame:
     # Cap outliers at IQR fences (Winsorization) using OutlierCapper."""
-    capper = OutlierCapper(numerical_cols=numerical_cols, iqr_multiplier=iqr_multiplier)
+    capper = OutlierCapper(
+        numerical_cols=numerical_cols,
+        iqr_multiplier=iqr_multiplier,
+        )
     return capper.fit_transform(df)
 
 
@@ -345,7 +365,10 @@ def compute_woe_iv(
         .reset_index()
     )
 
-    stats["dist_events"] = (stats["events"] + epsilon) / (total_events + epsilon)
+    events = (stats["events"] + epsilon)
+    total_events = (total_events + epsilon)
+
+    stats["dist_events"] = events / total_events
     stats["dist_non_events"] = (stats["non_events"] + epsilon) / (
         total_non_events + epsilon
     )
@@ -399,7 +422,10 @@ def compute_all_iv(
         results.append({"feature": feat, "iv": iv_value})
 
     iv_df = (
-        pd.DataFrame(results).sort_values("iv", ascending=False).reset_index(drop=True)
+        pd.DataFrame(results).sort_values(
+            "iv",
+            ascending=False,
+            ).reset_index(drop=True)
     )
     iv_df["predictive_power"] = iv_df["iv"].apply(_iv_label)
     return iv_df
@@ -423,7 +449,9 @@ class WoEFeatureTransformer(BaseEstimator, TransformerMixin):
                 col
                 for col in X.columns
                 if (
-                    col != self.target_col and not pd.api.types.is_numeric_dtype(X[col])
+                    col != self.target_col
+                    and
+                    not pd.api.types.is_numeric_dtype(X[col])
                 )
             ]
         else:
@@ -473,7 +501,10 @@ def calculate_rfm(
     rfm = (
         df.groupby(customer_id_col)
         .agg(
-            Recency=(transaction_date_col, lambda x: (snapshot_date - x.max()).days),
+            Recency=(
+                transaction_date_col,
+                lambda x: (snapshot_date - x.max()
+                           ).days),
             Frequency=(customer_id_col, "count"),
             Monetary=(amount_col, "sum"),
         )
@@ -492,9 +523,13 @@ def calculate_rfm(
     return rfm
 
 
-def create_rfm_features(df: pd.DataFrame, snapshot_date: str = None) -> pd.DataFrame:
+def create_rfm_features(
+        df: pd.DataFrame,
+        snapshot_date: str = None,
+        ) -> pd.DataFrame:
     """
-    Calculate RFM features and return a DataFrame with CustomerId and RFM metrics.
+    Calculate RFM features
+    and return a DataFrame with CustomerId and RFM metrics.
     """
     rfm = calculate_rfm(
         df,
@@ -513,9 +548,15 @@ def visualize_and_cluster_kmeans(
     random_state: int = 42,
 ) -> np.ndarray:
     """
-    Fits KMeans, plots the clusters across RFM dimensions, and returns cluster labels.
+    Fits KMeans,
+    plots the clusters across RFM dimensions,
+    and returns cluster labels.
     """
-    kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
+    kmeans = KMeans(
+        n_clusters=n_clusters,
+        random_state=random_state,
+        n_init=10,
+        )
     cluster_labels = kmeans.fit_predict(X_scaled)
 
     # Temporary dataframe for plotting
@@ -540,7 +581,13 @@ def visualize_and_cluster_kmeans(
     axes[0].set_title("Clusters: Recency vs Monetary")
 
     # 2. Boxplot: Monetary distribution by Cluster
-    sns.boxplot(data=plot_df, x="Cluster", y="Monetary", palette="viridis", ax=axes[1])
+    sns.boxplot(
+        data=plot_df,
+        x="Cluster",
+        y="Monetary",
+        palette="viridis",
+        ax=axes[1],
+        )
     axes[1].set_title("Monetary Value Distribution by Cluster")
 
     plt.tight_layout()
@@ -579,7 +626,11 @@ def assign_high_risk_label(
     X_scaled = scaler.fit_transform(X)
 
     # KMeans clustering
-    kmeans = KMeans(n_clusters=n_clusters, random_state=random_state, n_init=10)
+    kmeans = KMeans(
+        n_clusters=n_clusters,
+        random_state=random_state,
+        n_init=10,
+        )
     rfm["Cluster"] = kmeans.fit_predict(X_scaled)
 
     # Analyze clusters to identify high-risk (least engaged)
@@ -614,12 +665,23 @@ def assign_high_risk_label(
     rfm["is_high_risk"] = (rfm["Cluster"] == risk_cluster).astype(int)
 
     # Keep only needed columns
-    rfm = rfm[["CustomerId", "Recency", "Frequency", "Monetary", "is_high_risk"]]
+    rfm = rfm[
+        [
+            "CustomerId",
+            "Recency",
+            "Frequency",
+            "Monetary",
+            "is_high_risk",
+            ]
+        ]
 
     return rfm
 
 
-def create_proxy_target(df: pd.DataFrame, snapshot_date: str = None) -> pd.DataFrame:
+def create_proxy_target(
+        df: pd.DataFrame,
+        snapshot_date: str = None,
+        ) -> pd.DataFrame:
     """
     Main function to create is_high_risk target using RFM + KMeans.
     Returns the original DataFrame with the new target column added.
@@ -634,13 +696,19 @@ def create_proxy_target(df: pd.DataFrame, snapshot_date: str = None) -> pd.DataF
 
     # 3. Merge back to original DataFrame
     df = df.merge(
-        rfm_with_target[["CustomerId", "is_high_risk"]], on="CustomerId", how="left"
+        rfm_with_target[["CustomerId", "is_high_risk"]],
+        on="CustomerId",
+        how="left",
     )
 
+    high_risk_count = df['is_high_risk'].value_counts(normalize=True).round(3)
+
     print(
-        f"Proxy target created: {df['is_high_risk'].value_counts(normalize=True).round(3)}"
+        f"Proxy target created: {high_risk_count}"
     )
-    print(f"High-risk customers: {df['is_high_risk'].sum():,} out of {len(df):,}")
+    print(
+        f"High-risk customers: {df['is_high_risk'].sum():,} out of {len(df):,}"
+        )
 
     return df
 
@@ -662,7 +730,8 @@ def build_feature_pipeline(
             (
                 "missing_values",
                 MissingValueImputer(
-                    numerical_strategy="median", categorical_strategy="most_frequent"
+                    numerical_strategy="median",
+                    categorical_strategy="most_frequent",
                 ),
             ),
             ("outlier_capping", OutlierCapper(numerical_cols=numerical_cols)),
