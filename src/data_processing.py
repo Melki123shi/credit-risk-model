@@ -10,6 +10,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+from pathlib import Path
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -190,23 +191,25 @@ class DataFrameOneHotEncoder(BaseEstimator, TransformerMixin):
         self.categorical_cols_ = [
             col
             for col in present_cols
-            if (
-                not pd.api.types.is_numeric_dtype(X[col])
-                and col != self.categorical_cols
-            )
+            if not pd.api.types.is_numeric_dtype(X[col])
         ]
         self.encoder_ = OneHotEncoder(
             sparse_output=self.sparse_output,
             handle_unknown=self.handle_unknown,
         )
-        self.encoder_.fit(X[self.categorical_cols_])
-        self.feature_names_ = self.encoder_.get_feature_names_out(
-            self.categorical_cols_
+        if self.categorical_cols_:
+            self.encoder_.fit(X[self.categorical_cols_])
+        self.feature_names_ = (
+            self.encoder_.get_feature_names_out(self.categorical_cols_)
+            if self.categorical_cols_
+            else []
         )
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
+        if not self.categorical_cols_:
+            return X
         encoded = self.encoder_.transform(X[self.categorical_cols_])
         encoded_df = pd.DataFrame(
             encoded,
@@ -757,3 +760,80 @@ def build_feature_pipeline(
     )
 
     return pipeline
+
+
+
+
+if __name__ == "__main__":
+
+    logger.info("========== Starting Data Processing Pipeline ==========")
+
+    # ------------------------------------------------------------------
+    # Project paths
+    # ------------------------------------------------------------------
+    project_root = Path(__file__).resolve().parent.parent
+
+    raw_data_path = project_root / "data" / "raw" / "credit_data.csv"
+    processed_dir = project_root / "data" / "processed"
+    processed_dir.mkdir(parents=True, exist_ok=True)
+
+    processed_data_path = processed_dir / "processed_data.csv"
+
+    # ------------------------------------------------------------------
+    # Load raw dataset
+    # ------------------------------------------------------------------
+    logger.info(f"Loading raw dataset from: {raw_data_path}")
+
+    df = pd.read_csv(raw_data_path)
+
+    # Convert datetime column
+    df["TransactionStartTime"] = pd.to_datetime(
+        df["TransactionStartTime"], utc=True
+    )
+
+    logger.info("Creating proxy target using RFM + KMeans...")
+
+    df = create_proxy_target(df)
+
+    target_col = "is_high_risk"
+
+    numerical_cols = (
+        df.select_dtypes(include=["number"])
+        .columns.drop(target_col)
+        .tolist()
+    )
+
+    
+
+    categorical_cols = [
+        "ProviderId", "ProductId", "ProductCategory", "ChannelId",
+    ]
+
+    logger.info(f"Numerical columns: {len(numerical_cols)}")
+    logger.info(f"Categorical columns: {len(categorical_cols)}")
+
+    pipeline = build_feature_pipeline(
+        target_col=target_col,
+        scaling_method="standard",
+        categorical_cols=categorical_cols,
+        numerical_cols=numerical_cols,
+    )
+
+    logger.info("Running preprocessing pipeline...")
+
+    processed_df = pipeline.fit_transform(
+        df,
+        y=df[target_col]
+    )
+
+    # ------------------------------------------------------------------
+    # Save processed dataset
+    # ------------------------------------------------------------------
+    processed_df.to_csv(processed_data_path, index=False)
+
+    logger.info(f"Processed data saved to: {processed_data_path}")
+    logger.info(f"Processed dataset shape: {processed_df.shape}")
+
+    print("\n========== PIPELINE COMPLETED SUCCESSFULLY ==========")
+    print(f"Processed data saved to:\n{processed_data_path}")
+    print(f"Final dataset shape: {processed_df.shape}")
