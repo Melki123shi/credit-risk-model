@@ -21,27 +21,41 @@ from data_processing import (  # noqa: E402
 @pytest.fixture
 def sample_transactions():
     dates = pd.date_range("2018-11-01", periods=100, freq="h", tz="UTC")
-    return pd.DataFrame({
-        "TransactionId": [f"T{i}" for i in range(100)],
-        "BatchId": [f"B{i // 10}" for i in range(100)],
-        "AccountId": [f"A{i % 5}" for i in range(100)],
-        "SubscriptionId": [f"S{i % 5}" for i in range(100)],
-        "CustomerId": [f"C{i % 3}" for i in range(100)],
-        "CurrencyCode": ["UGX"] * 100,
-        "CountryCode": [256] * 100,
-        "ProviderId": [f"P{i % 4}" for i in range(100)],
-        "ProductId": [f"Pr{i % 6}" for i in range(100)],
-        "ProductCategory": [
-            "Financial Services", "Airtime", "Utility Bill",
-            "Data Bundle", "TV", "Movie",
-        ] * 16 + ["Financial Services"] * 4,
-        "ChannelId": ["ChannelId_4", "ChannelId_3", "ChannelId_2"] * 33 + ["ChannelId_4"],
-        "Amount": np.random.uniform(-1000, 5000, 100).round(2),
-        "Value": np.random.randint(100, 5000, 100),
-        "TransactionStartTime": dates,
-        "PricingStrategy": [1, 2, 3, 4] * 25,
-        "FraudResult": [0] * 95 + [1] * 5,
-    })
+    return pd.DataFrame(
+        {
+            "TransactionId": [f"T{i}" for i in range(100)],
+            "BatchId": [f"B{i // 10}" for i in range(100)],
+            "AccountId": [f"A{i % 5}" for i in range(100)],
+            "SubscriptionId": [f"S{i % 5}" for i in range(100)],
+            "CustomerId": [f"C{i % 3}" for i in range(100)],
+            "CurrencyCode": ["UGX"] * 100,
+            "CountryCode": [256] * 100,
+            "ProviderId": [f"P{i % 4}" for i in range(100)],
+            "ProductId": [f"Pr{i % 6}" for i in range(100)],
+            "ProductCategory": [
+                "Financial Services",
+                "Airtime",
+                "Utility Bill",
+                "Data Bundle",
+                "TV",
+                "Movie",
+            ]
+            * 16
+            + ["Financial Services"] * 4,
+            "ChannelId": [
+                "ChannelId_4",
+                "ChannelId_3",
+                "ChannelId_2",
+            ]
+            * 33
+            + ["ChannelId_4"],
+            "Amount": np.random.uniform(-1000, 5000, 100).round(2),
+            "Value": np.random.randint(100, 5000, 100),
+            "TransactionStartTime": dates,
+            "PricingStrategy": [1, 2, 3, 4] * 25,
+            "FraudResult": [0] * 95 + [1] * 5,
+        }
+    )
 
 
 class TestEngineerFeatures:
@@ -49,11 +63,17 @@ class TestEngineerFeatures:
         result = engineer_features(sample_transactions)
 
         expected_new_cols = [
-            "TransactionHour", "TransactionDay", "TransactionMonth",
-            "TransactionYear", "TransactionWeekday",
-            "TotalTransactionAmount", "AvgTransactionAmount",
-            "TransactionCount", "StdTransactionAmount",
-            "Recency", "CustomerTenureDays",
+            "TransactionHour",
+            "TransactionDay",
+            "TransactionMonth",
+            "TransactionYear",
+            "TransactionWeekday",
+            "TotalTransactionAmount",
+            "AvgTransactionAmount",
+            "TransactionCount",
+            "StdTransactionAmount",
+            "Recency",
+            "CustomerTenureDays",
         ]
         for col in expected_new_cols:
             assert col in result.columns, f"Missing column: {col}"
@@ -69,20 +89,21 @@ class TestEngineerFeatures:
         cust_c0 = result[result["CustomerId"] == "C0"]
         assert cust_c0["TransactionCount"].nunique() == 1
         assert cust_c0["TotalTransactionAmount"].iloc[0] == pytest.approx(
-            sample_transactions[
-                sample_transactions["CustomerId"] == "C0"
-            ]["Value"].sum(),
+            sample_transactions[sample_transactions["CustomerId"] == "C0"][
+                "Value"
+            ].sum(),
             rel=1e-6,
         )
 
 
 class TestWoEIV:
     def test_compute_woe_iv_returns_tuple(self, sample_transactions):
-        sample_transactions["target"] = (
-            sample_transactions["FraudResult"].astype(int)
-        )
+        fraud_res = sample_transactions["FraudResult"].astype(int)
+        sample_transactions["target"] = fraud_res
         stats, iv = compute_woe_iv(
-            sample_transactions, "ProductCategory", "target"
+            sample_transactions,
+            "ProductCategory",
+            "target",
         )
         assert isinstance(stats, pd.DataFrame)
         assert isinstance(iv, float)

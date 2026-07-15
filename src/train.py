@@ -24,7 +24,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.data_processing import split_data
+from src.data_processing import split_data  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -32,9 +32,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 RANDOM_STATE = 42
-proj_root = Path.cwd().resolve().parent
-if str(proj_root) not in sys.path:
-    sys.path.insert(0, str(proj_root))
+
 
 def get_models():
     return {
@@ -91,9 +89,15 @@ def train_and_track(
 
     # Drop ID, datetime, and constant columns that aren't features
     cols_to_drop = [
-        "TransactionId", "BatchId", "AccountId", "SubscriptionId",
-        "CustomerId", "CurrencyCode", "TransactionStartTime",
-        "FirstTransaction", "LastTransaction",
+        "TransactionId",
+        "BatchId",
+        "AccountId",
+        "SubscriptionId",
+        "CustomerId",
+        "CurrencyCode",
+        "TransactionStartTime",
+        "FirstTransaction",
+        "LastTransaction",
     ]
     cols_to_drop = [c for c in cols_to_drop if c in df.columns]
     df = df.drop(columns=cols_to_drop)
@@ -118,17 +122,28 @@ def train_and_track(
             model.fit(X_train, y_train)
 
             train_metrics, _, _ = evaluate_model(model, X_train, y_train)
-            test_metrics, y_pred, y_proba = evaluate_model(model, X_test, y_test)
+            test_metrics, y_pred, y_proba = evaluate_model(
+                model, X_test, y_test
+            )
 
-            mlflow.log_params(model.get_params() if hasattr(model, "get_params") else {})
-            mlflow.log_metrics({f"train_{k}": v for k, v in train_metrics.items()})
-            mlflow.log_metrics({f"test_{k}": v for k, v in test_metrics.items()})
+            mlflow.log_params(
+                model.get_params() if hasattr(model, "get_params") else {}
+            )
+            mlflow.log_metrics(
+                {f"train_{k}": v for k, v in train_metrics.items()}
+            )
+            mlflow.log_metrics(
+                {f"test_{k}": v for k, v in test_metrics.items()}
+            )
 
             if hasattr(model, "feature_importances_"):
-                importance_df = pd.DataFrame({
-                    "feature": feature_cols[:len(model.feature_importances_)],
-                    "importance": model.feature_importances_,
-                }).sort_values("importance", ascending=False)
+                model_len = len(model.feature_importances_)
+                importance_df = pd.DataFrame(
+                    {
+                        "feature": feature_cols[:model_len],
+                        "importance": model.feature_importances_,
+                    }
+                ).sort_values("importance", ascending=False)
                 mlflow.log_table(importance_df, "feature_importance.json")
 
             cm = confusion_matrix(y_test, y_pred)
@@ -145,20 +160,29 @@ def train_and_track(
             else:
                 mlflow.sklearn.log_model(model, f"{name}_model")
 
-            logger.info(f"{name} - Test ROC-AUC: {test_metrics['roc_auc']:.4f}")
+            test_msg = f"Test ROC-AUC: {test_metrics['roc_auc']:.4f}"
+
+            logger.info(f"{name} - {test_msg}")
             results[name] = {
                 "model": model,
                 "test_metrics": test_metrics,
                 "run_id": mlflow.active_run().info.run_id,
             }
 
-    best_name = max(results, key=lambda k: results[k]["test_metrics"]["roc_auc"])
+    best_name = max(
+        results,
+        key=lambda k: results[k]["test_metrics"]["roc_auc"],
+    )
     best_result = results[best_name]
+    message = f"(ROC-AUC: {best_result['test_metrics']['roc_auc']:.4f})"
 
-    logger.info(f"Best model: {best_name} (ROC-AUC: {best_result['test_metrics']['roc_auc']:.4f})")
+    logger.info(f"Best model: {best_name} {message}")
 
     with mlflow.start_run(run_name=f"{best_name}_best"):
-        mlflow.log_metric("best_roc_auc", best_result["test_metrics"]["roc_auc"])
+        mlflow.log_metric(
+            "best_roc_auc",
+            best_result["test_metrics"]["roc_auc"],
+        )
         mlflow.log_metric("best_f1", best_result["test_metrics"]["f1"])
         mlflow.log_text(best_name, "best_model_name.txt")
 
@@ -173,7 +197,9 @@ def train_and_track(
         model_uri = f"runs:/{mlflow.active_run().info.run_id}/model"
         result = mlflow.register_model(model_uri, "credit-risk-best-model")
 
-        logger.info(f"Model registered as 'credit-risk-best-model' (version {result.version})")
+        msg = "Model registered as 'credit-risk-best-model'"
+
+        logger.info(f"{msg} (version {result.version})")
 
     return results
 

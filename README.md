@@ -95,7 +95,10 @@ credit-risk-model/
 │   └── processed/                 # Processed data for training
 ├── notebooks/
 │   ├── eda.ipynb                  # Exploratory analysis
-│   └── feature_engineering.ipynb  # Feature engineering exploration
+│   ├── feature_engineering.ipynb  # Feature engineering exploration
+│   └── predict.ipynb              # Prediction & scoring demo
+├── models/
+│   └── pipeline.joblib            # Fitted sklearn pipeline
 ├── src/
 │   ├── __init__.py
 │   ├── data_loader.py             # Data loading utilities
@@ -198,7 +201,7 @@ python -m src.data_processing
 ```
 
 This will:
-1. Load raw data from `data/raw/credit_data.csv`
+1. Load raw data from `data/raw/data.csv`
 2. Create proxy target via RFM + KMeans
 3. Run the full feature pipeline
 4. Save to `data/processed/processed_data.csv`
@@ -217,6 +220,18 @@ This will:
 4. Register the best model as `credit-risk-best-model`
 
 View experiments: `mlflow ui`
+
+### Model Comparison
+
+| Model | Accuracy | Precision | Recall | F1 | AUC |
+|-------|----------|-----------|--------|-----|-----|
+| LogisticRegression | 0.9985 | 0.9937 | 0.9932 | 0.9935 | 1.0000 |
+| RandomForest | 0.9998 | 1.0000 | 0.9986 | 0.9993 | 1.0000 |
+| GradientBoosting | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| XGBoost | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| LightGBM | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+
+> **Note:** Near-perfect scores are expected since the proxy target is derived from the same RFM features used for prediction. This is a known limitation of proxy-based approaches — the target is not independent of the features. In production, the model should be validated against actual default data when available.
 
 ### Running Tests
 
