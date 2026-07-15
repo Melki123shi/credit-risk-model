@@ -1,9 +1,9 @@
 import logging
+import sys
 import mlflow
 import mlflow.sklearn
 import mlflow.xgboost
 import mlflow.lightgbm
-import numpy as np
 import pandas as pd
 from pathlib import Path
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
@@ -20,7 +20,11 @@ from sklearn.metrics import (
 from xgboost import XGBClassifier
 from lightgbm import LGBMClassifier
 
-from data_processing import split_data
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from src.data_processing import split_data
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -28,7 +32,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 RANDOM_STATE = 42
-
+proj_root = Path.cwd().resolve().parent
+if str(proj_root) not in sys.path:
+    sys.path.insert(0, str(proj_root))
 
 def get_models():
     return {
@@ -83,6 +89,16 @@ def train_and_track(
     if target_col not in df.columns:
         raise ValueError(f"Target column '{target_col}' not found in data")
 
+    # Drop ID, datetime, and constant columns that aren't features
+    cols_to_drop = [
+        "TransactionId", "BatchId", "AccountId", "SubscriptionId",
+        "CustomerId", "CurrencyCode", "TransactionStartTime",
+        "FirstTransaction", "LastTransaction",
+    ]
+    cols_to_drop = [c for c in cols_to_drop if c in df.columns]
+    df = df.drop(columns=cols_to_drop)
+    logger.info(f"Dropped non-feature columns: {cols_to_drop}")
+
     X_train, X_val, X_test, y_train, y_val, y_test = split_data(
         df, target_col=target_col, random_state=RANDOM_STATE
     )
@@ -122,8 +138,10 @@ def train_and_track(
                 "classification_report.txt",
             )
 
-            if name in ["XGBoost", "LightGBM"]:
-                mlflow.xgboost.log_model(model, f"{name}_model") if name == "XGBoost" else mlflow.lightgbm.log_model(model, f"{name}_model")
+            if name == "XGBoost":
+                mlflow.xgboost.log_model(model, f"{name}_model")
+            elif name == "LightGBM":
+                mlflow.lightgbm.log_model(model, f"{name}_model")
             else:
                 mlflow.sklearn.log_model(model, f"{name}_model")
 
@@ -162,6 +180,7 @@ def train_and_track(
 
 if __name__ == "__main__":
     results = train_and_track()
+    print("\n========== TRAINING COMPLETE ==========")
 
     print("\n========== MODEL COMPARISON ==========")
     for name, res in results.items():

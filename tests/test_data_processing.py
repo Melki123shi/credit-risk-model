@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from data_processing import (
+from data_processing import (  # noqa: E402
     engineer_features,
     compute_woe_iv,
     _iv_label,
@@ -31,7 +31,10 @@ def sample_transactions():
         "CountryCode": [256] * 100,
         "ProviderId": [f"P{i % 4}" for i in range(100)],
         "ProductId": [f"Pr{i % 6}" for i in range(100)],
-        "ProductCategory": ["Financial Services", "Airtime", "Utility Bill", "Data Bundle", "TV", "Movie"] * 16 + ["Financial Services"] * 4,
+        "ProductCategory": [
+            "Financial Services", "Airtime", "Utility Bill",
+            "Data Bundle", "TV", "Movie",
+        ] * 16 + ["Financial Services"] * 4,
         "ChannelId": ["ChannelId_4", "ChannelId_3", "ChannelId_2"] * 33 + ["ChannelId_4"],
         "Amount": np.random.uniform(-1000, 5000, 100).round(2),
         "Value": np.random.randint(100, 5000, 100),
@@ -68,7 +71,7 @@ class TestEngineerFeatures:
         assert cust_c0["TotalTransactionAmount"].iloc[0] == pytest.approx(
             sample_transactions[
                 sample_transactions["CustomerId"] == "C0"
-            ]["Amount"].sum(),
+            ]["Value"].sum(),
             rel=1e-6,
         )
 

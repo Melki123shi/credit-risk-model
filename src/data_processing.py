@@ -1,16 +1,22 @@
-import logging
-import pandas as pd
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.cluster import KMeans
-from sklearn.impute import SimpleImputer
-from sklearn.model_selection import train_test_split
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler
-from typing import Dict, List, Tuple
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-from pathlib import Path
+import matplotlib
+matplotlib.use("Agg")
+
+import logging  # noqa: E402
+import pandas as pd  # noqa: E402
+import joblib  # noqa: E402
+from sklearn.base import BaseEstimator, TransformerMixin  # noqa: E402
+from sklearn.cluster import KMeans  # noqa: E402
+from sklearn.impute import SimpleImputer  # noqa: E402
+from sklearn.model_selection import train_test_split  # noqa: E402
+from sklearn.pipeline import Pipeline  # noqa: E402
+from sklearn.preprocessing import (  # noqa: E402
+    OneHotEncoder, StandardScaler, MinMaxScaler
+)
+from typing import Dict, List, Tuple  # noqa: E402
+import numpy as np  # noqa: E402
+import matplotlib.pyplot as plt  # noqa: E402
+import seaborn as sns  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
@@ -35,10 +41,10 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     customer_agg = (
         df.groupby("CustomerId")
         .agg(
-            TotalTransactionAmount=("Amount", "sum"),
-            AvgTransactionAmount=("Amount", "mean"),
+            TotalTransactionAmount=("Value", "sum"),
+            AvgTransactionAmount=("Value", "mean"),
             TransactionCount=("TransactionId", "count"),
-            StdTransactionAmount=("Amount", "std"),
+            StdTransactionAmount=("Value", "std"),
             FirstTransaction=("TransactionStartTime", "min"),
             LastTransaction=("TransactionStartTime", "max"),
         )
@@ -310,7 +316,7 @@ class OutlierCapper(BaseEstimator, TransformerMixin):
 
     def fit(self, X: pd.DataFrame, y=None):
         X = X.copy()
-        self.cols_ = self.numerical_cols or [
+        self.cols_ = [
             c for c in self.numerical_cols if c in X.columns
         ]
         self.lower_bounds_ = {}
@@ -416,10 +422,11 @@ def compute_all_iv(
 
         # Bin numerical features
         if feat in numerical_cols:
+            numeric_vals = pd.to_numeric(temp_df[feat], errors="coerce")
             try:
-                temp_df[feat] = pd.qcut(df[feat], q=10, duplicates="drop")
+                temp_df[feat] = pd.qcut(numeric_vals, q=10, duplicates="drop")
             except Exception:
-                temp_df[feat] = pd.cut(df[feat], bins=5)
+                temp_df[feat] = pd.cut(numeric_vals, bins=5)
 
         _, iv_value = compute_woe_iv(temp_df, feat, target)
         results.append({"feature": feat, "iv": iv_value})
@@ -485,7 +492,7 @@ def calculate_rfm(
     df: pd.DataFrame,
     customer_id_col: str = "CustomerId",
     transaction_date_col: str = "TransactionStartTime",
-    amount_col: str = "Amount",
+    amount_col: str = "Value",
     snapshot_date: str = None,
 ) -> pd.DataFrame:
     df = df.copy()
@@ -538,7 +545,7 @@ def create_rfm_features(
         df,
         customer_id_col="CustomerId",
         transaction_date_col="TransactionStartTime",
-        amount_col="Amount",
+        amount_col="Value",
         snapshot_date=snapshot_date,
     )
     return rfm
@@ -588,7 +595,9 @@ def visualize_and_cluster_kmeans(
         data=plot_df,
         x="Cluster",
         y="Monetary",
+        hue="Cluster",
         palette="viridis",
+        legend=False,
         ax=axes[1],
         )
     axes[1].set_title("Monetary Value Distribution by Cluster")
@@ -762,10 +771,7 @@ def build_feature_pipeline(
     return pipeline
 
 
-
-
 if __name__ == "__main__":
-
     logger.info("========== Starting Data Processing Pipeline ==========")
 
     # ------------------------------------------------------------------
@@ -773,7 +779,7 @@ if __name__ == "__main__":
     # ------------------------------------------------------------------
     project_root = Path(__file__).resolve().parent.parent
 
-    raw_data_path = project_root / "data" / "raw" / "credit_data.csv"
+    raw_data_path = project_root / "data" / "raw" / "data.csv"
     processed_dir = project_root / "data" / "processed"
     processed_dir.mkdir(parents=True, exist_ok=True)
 
@@ -803,8 +809,6 @@ if __name__ == "__main__":
         .tolist()
     )
 
-    
-
     categorical_cols = [
         "ProviderId", "ProductId", "ProductCategory", "ChannelId",
     ]
@@ -825,6 +829,15 @@ if __name__ == "__main__":
         df,
         y=df[target_col]
     )
+
+    # ------------------------------------------------------------------
+    # Save fitted pipeline for inference
+    # ------------------------------------------------------------------
+    models_dir = project_root / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
+    pipeline_path = models_dir / "pipeline.joblib"
+    joblib.dump(pipeline, pipeline_path)
+    logger.info(f"Fitted pipeline saved to: {pipeline_path}")
 
     # ------------------------------------------------------------------
     # Save processed dataset

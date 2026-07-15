@@ -12,3 +12,4 @@ uvicorn[standard]
 pydantic
 pytest
 requests
+joblib
