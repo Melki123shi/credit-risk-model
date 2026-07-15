@@ -16,4 +16,6 @@ mlartifacts/
 .vscode/
 .idea/
 *.log
+mlflow.db
+notebooks/mlflow.db
 Dockerfile.dockerignore
