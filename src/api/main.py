@@ -94,9 +94,8 @@ def load_artifacts():
         logger.error("Model not available. Run 'python -m src.train' first.")
 
     try:
-        pipeline_path = (
-            Path(__file__).resolve().parent.parent.parent / "models" / "pipeline.joblib"
-        )
+        parent = Path(__file__).resolve().parent.parent.parent
+        pipeline_path = parent / "models" / "pipeline.joblib"
         pipeline = joblib.load(pipeline_path)
         logger.info(f"Pipeline loaded from: {pipeline_path}")
     except Exception as e:
@@ -165,38 +164,50 @@ def predict(request: PredictionRequest):
     amounts = [t.amount for t in request.transactions]
 
     if pipeline is not None:
-        raw_df = pd.DataFrame([
-            {
-                "TransactionId": t.transaction_id,
-                "BatchId": "Batch_1",
-                "AccountId": t.account_id,
-                "SubscriptionId": t.subscription_id,
-                "CustomerId": t.customer_id,
-                "CurrencyCode": "UGX",
-                "CountryCode": 256,
-                "ProviderId": t.provider_id,
-                "ProductId": t.product_id,
-                "ProductCategory": t.product_category,
-                "ChannelId": t.channel_id,
-                "Amount": t.amount,
-                "Value": abs(t.value),
-                "TransactionStartTime": pd.to_datetime(
-                    t.transaction_start_time, utc=True
-                ),
-                "PricingStrategy": t.pricing_strategy,
-                "FraudResult": 0,
-            }
-            for t in request.transactions
-        ])
+        raw_df = pd.DataFrame(
+            [
+                {
+                    "TransactionId": t.transaction_id,
+                    "BatchId": "Batch_1",
+                    "AccountId": t.account_id,
+                    "SubscriptionId": t.subscription_id,
+                    "CustomerId": t.customer_id,
+                    "CurrencyCode": "UGX",
+                    "CountryCode": 256,
+                    "ProviderId": t.provider_id,
+                    "ProductId": t.product_id,
+                    "ProductCategory": t.product_category,
+                    "ChannelId": t.channel_id,
+                    "Amount": t.amount,
+                    "Value": abs(t.value),
+                    "TransactionStartTime": pd.to_datetime(
+                        t.transaction_start_time, utc=True
+                    ),
+                    "PricingStrategy": t.pricing_strategy,
+                    "FraudResult": 0,
+                }
+                for t in request.transactions
+            ]
+        )
         try:
             raw_df["is_high_risk"] = 0
             features_df = pipeline.transform(raw_df)
             cols_to_drop = [
-                "is_high_risk", "TransactionId", "BatchId", "AccountId",
-                "SubscriptionId", "CustomerId", "CurrencyCode",
-                "TransactionStartTime", "FirstTransaction", "LastTransaction",
+                "is_high_risk",
+                "TransactionId",
+                "BatchId",
+                "AccountId",
+                "SubscriptionId",
+                "CustomerId",
+                "CurrencyCode",
+                "TransactionStartTime",
+                "FirstTransaction",
+                "LastTransaction",
             ]
-            cols_to_drop = [c for c in cols_to_drop if c in features_df.columns]
+            cols_to_drop = []
+            for c in cols_to_drop:
+                if c in features_df.columns:
+                    cols_to_drop.append(c)
             features_df = features_df.drop(columns=cols_to_drop)
         except Exception as e:
             logger.error(f"Pipeline transform error: {e}")
@@ -206,8 +217,12 @@ def predict(request: PredictionRequest):
             )
     else:
         feature_dict = {
-            "TotalTransactionAmount": sum(abs(t.value) for t in request.transactions),
-            "AvgTransactionAmount": sum(abs(t.value) for t in request.transactions)
+            "TotalTransactionAmount": sum(
+                abs(t.value) for t in request.transactions
+                ),
+            "AvgTransactionAmount": sum(
+                abs(t.value) for t in request.transactions
+                )
             / len(request.transactions),
             "TransactionCount": len(request.transactions),
             "StdTransactionAmount": pd.Series(
@@ -241,15 +256,16 @@ def predict(request: PredictionRequest):
             risk_prob = float(model.predict(features_df)[0])
         except Exception as e:
             logger.error(f"Prediction error: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"Prediction failed: {str(e)}"
-            )
+            error_message = f"Prediction failed: {str(e)}"
+            raise HTTPException(status_code=500, detail=error_message)
 
     credit_score = probability_to_credit_score(risk_prob)
     risk_category = get_risk_category(credit_score)
     avg_amount = sum(amounts) / len(amounts) if amounts else 0
     loan_amount, loan_duration = recommend_loan(
-        avg_amount, credit_score, risk_prob
+        avg_amount,
+        credit_score,
+        risk_prob,
     )
 
     return PredictionResponse(
@@ -264,4 +280,5 @@ def predict(request: PredictionRequest):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
