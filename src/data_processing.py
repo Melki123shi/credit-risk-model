@@ -96,11 +96,14 @@ class MissingValueImputer(BaseEstimator, TransformerMixin):
     def transform(self, X):
         X = X.copy()
 
-        if self.num_cols_:
-            X[self.num_cols_] = self.num_imputer_.transform(X[self.num_cols_])
+        num_cols = [c for c in self.num_cols_ if c in X.columns]
+        cat_cols = [c for c in self.cat_cols_ if c in X.columns]
 
-        if self.cat_cols_:
-            X[self.cat_cols_] = self.cat_imputer_.transform(X[self.cat_cols_])
+        if num_cols:
+            X[num_cols] = self.num_imputer_.transform(X[num_cols])
+
+        if cat_cols:
+            X[cat_cols] = self.cat_imputer_.transform(X[cat_cols])
 
         return X
 
@@ -273,9 +276,10 @@ class FeatureScaler(BaseEstimator, TransformerMixin):
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X = X.copy()
-        if self.numerical_cols_:
-            scaled = self.scaler_.transform(X[self.numerical_cols_])
-            X[self.numerical_cols_] = scaled
+        active_cols = [c for c in self.numerical_cols_ if c in X.columns]
+        if active_cols:
+            scaled = self.scaler_.transform(X[active_cols])
+            X[active_cols] = scaled
         return X
 
 
